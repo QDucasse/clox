@@ -5,6 +5,10 @@
 #include "compiler.h"
 #include "scanner.h"
 
+#ifdef DEBUG_PRINT_CODE
+#include "debug.h"
+#endif
+
 /* ==================================
         STRUCTS AND GLOBALS
 ====================================*/
@@ -198,7 +202,7 @@ static void emitConstant(Value value) {
 static void number() {
   /* Assumes the number has already been consumed */
   double value = strtod(parser.previous.start, NULL);
-  emitConstant(value);
+  emitConstant(NUMBER_VAL(value));
 }
 
 /* ======= RETURN ========= */
@@ -323,5 +327,10 @@ bool compile(const char* source, Chunk* chunk) {
   consume(TOKEN_EOF, "Expect end of expression.");
 
   endCompiler();
+#ifdef DEBUG_PRINT_CODE
+    if (!parser.hadError) {
+      disassembleChunk(currentChunk(), "code");
+    }
+#endif
   return !parser.hadError;
 }
