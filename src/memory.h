@@ -1,7 +1,14 @@
 #ifndef clox_memory_h
 #define clox_memory_h
-/* Memory handlers */
+
 #include "common.h"
+#include "object.h"
+
+/* Allocate an array with a given element type and count */
+#define ALLOCATE(type, count) \
+    (type*)reallocate(NULL, 0, sizeof(type) * (count))
+
+#define FREE(type, pointer) reallocate(pointer, sizeof(type), 0)
 
 /*
 The capacity becomes either 8 if the old one was smaller
@@ -33,5 +40,8 @@ non-0   | <oldSize | Shrink existing allocation
 non-0   | >oldSize | Grow existing allocation
 */
 void* reallocate(void* pointer, size_t oldSize, size_t newSize);
+
+/* Free the objects in the linked list */
+void freeObjects();
 
 #endif

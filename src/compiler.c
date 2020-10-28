@@ -242,6 +242,13 @@ static void number() {
   emitConstant(NUMBER_VAL(value));
 }
 
+/* =========== STRING =========== */
+/* Creates a string from the token */
+static void string() {
+  emitConstant(OBJ_VAL(copyString(parser.previous.start + 1,
+                                  parser.previous.length -2)));
+}
+
 /* ======== UNARY OPERATORS ========== */
 
 /* Consumes the operand and emit the operator instruction */
@@ -283,7 +290,7 @@ ParseRule rules[] = {
   [TOKEN_GREATER_EQUAL] = {NULL,     binary, PREC_COMPARISON},
   [TOKEN_LESS]          = {NULL,     binary, PREC_COMPARISON},
   [TOKEN_LESS_EQUAL]    = {NULL,     binary, PREC_COMPARISON},
-  [TOKEN_IDENTIFIER]    = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_IDENTIFIER]    = {string,   NULL,   PREC_NONE},
   [TOKEN_STRING]        = {NULL,     NULL,   PREC_NONE},
   [TOKEN_NUMBER]        = {number,   NULL,   PREC_NONE},
   [TOKEN_AND]           = {NULL,     NULL,   PREC_NONE},
