@@ -123,7 +123,7 @@ static TokenType checkKeyword(int start, int length, const char* rest, TokenType
   - the lexeme is exactly as long as the reserved word
   - the characters are corresponding */
   if (scanner.current - scanner.start == start + length &&
-      memcpy(scanner.start + start, rest, length) == 0) {
+      memcmp(scanner.start + start, rest, length) == 0) {
     return type;
   }
 

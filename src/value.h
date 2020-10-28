@@ -3,7 +3,7 @@
 
 #include "common.h"
 
-/* VM-supported built0in values */
+/* VM-supported built-in values */
 typedef enum {
   VAL_BOOL,
   VAL_NIL,
@@ -36,6 +36,8 @@ typedef struct { /* Dynamic array */
   int count;
   Value* values;
 } ValueArray;
+
+bool valuesEqual(Value a, Value b);
 
 void initValueArray(ValueArray* array);
 void writeValueArray(ValueArray* array, Value value);

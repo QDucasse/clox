@@ -1,22 +1,18 @@
 CC=gcc
-CFLAGS= -std=c99 -W -Wall -pedantic
-LDFLAGS=
-EXEC=main
-SRC= chunk.c compiler.c debug.c main.c memory.c scanner.c value.c vm.c
-OBJ= $(SRC:.c=.o)
+TARGET=clox
+BUILDDIR=bin/
+PREFIX=/usr/local/bin/
+SOURCES=$(wildcard src/*.c)
+MAIN=main.c
+override CFLAGS+=-Werror -Wall -g -fPIC -O2 -DNDEBUG -ftrapv -Wundef -Wwrite-strings -Wuninitialized -pedantic -std=c11 -fsanitize=address
+override LDFLAG+=
 
-all: $(EXEC)
+all: main.c
+	mkdir -p $(BUILDDIR)
+	$(CC) $(MAIN) $(SOURCES) -o $(BUILDDIR)$(TARGET) $(CFLAGS) $(LDFLAGS)
 
-main: $(OBJ)
-	$(CC) -o $@ $^ $(LDFLAGS)
+install: all
+	install $(BUILDDIR)$(TARGET) $(PREFIX)$(TARGET)
 
-%.o: %.c
-	$(CC) -o $@ -c $< $(CFLAGS)
-
-.PHONY: clean mrpropre
-
-clean:
-	rm -rf *.o
-
-mrpropre: clean
-	rm -rf $(EXEC)
+uninstall:
+	rm -rf $(PREFIX)$(TARGET)
