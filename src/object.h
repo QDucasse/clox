@@ -28,6 +28,7 @@ struct sObjString {
   Obj obj;     /* State of the object, shared among all Objects */
   int length;  /* Length of the string */
   char* chars; /* Charaters composing the string */
+  uint32_t hash; /* Hash of the string */
 };
 
 /* Struct inheritance, safe cast from ObjString to Obj (its first field) */
