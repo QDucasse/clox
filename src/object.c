@@ -57,6 +57,28 @@ static uint32_t hashString(const char* key, int length) {
 }
 
 /* ==================================
+         FUNCTION CREATION
+====================================*/
+/* New function creation */
+ObjFunction* newFunction() {
+  ObjFunction* function = ALLOCATE_OBJ(ObjFunction, OBJ_FUNCTION);
+
+  function->arity = 0;
+  function->name = NULL;
+  initChunk(&function->chunk);
+  return function;
+}
+
+/* ==================================
+      NATIVE FUNCTION CREATION
+====================================*/
+ObjNative* newNative(NativeFn function) {
+  ObjNative* native = ALLOCATE_OBJ(ObjNative, OBJ_NATIVE);
+  native->function = function;
+  return native;
+}
+
+/* ==================================
           STRING CREATION
 ====================================*/
 
@@ -95,11 +117,30 @@ ObjString* copyString(const char* chars, int length) {
   return allocateString(heapChars, length, hash);
 }
 
+/* ===================================
+            PRINT METHODS
+====================================*/
+
+/* Function printer */
+static void printFunction(ObjFunction* function) {
+  if (function->name == NULL) {
+    printf("<script>");
+    return;
+  }
+  printf("<fn %s>", function->name->chars);
+}
+
 /* Print object */
 void printObject(Value value) {
   switch(OBJ_TYPE(value)) {
     case OBJ_STRING:
       printf("%s", AS_CSTRING(value));
+      break;
+    case OBJ_FUNCTION:
+      printFunction(AS_FUNCTION(value));
+      break;
+    case OBJ_NATIVE:
+      printf("<native fn>");
       break;
   }
 }

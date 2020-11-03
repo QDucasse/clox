@@ -55,23 +55,32 @@ typedef struct {
   int depth;  /* Scope depth of the block where the local variable was declared */
 } Local;
 
+/* Different types of function */
+typedef enum {
+  TYPE_FUNCTION,
+  TYPE_SCRIPT
+} FunctionType;
+
 /* Compiler representation with access to states */
-typedef struct {
-  Local locals[UINT8_COUNT]; /* Local variables */
-  int localCount;            /* Number of local variables in scope */
-  int scopeDepth;            /* Number of blocks surrounding current code */
+typedef struct Compiler {
+  struct Compiler* enclosing; /* Compiler that encloses it */
+  ObjFunction* function;      /* Implicit top-level main() function*/
+  FunctionType type;          /* Compiler knows when it is in the top level*/
+
+  Local locals[UINT8_COUNT];  /* Local variables */
+  int localCount;             /* Number of local variables in scope */
+  int scopeDepth;             /* Number of blocks surrounding current code */
 } Compiler;
 
 /* Compiler global variable */
 Compiler* current = NULL;
 
-
-/* Reference to the current Chunk */
+/* Reference to current chunk */
 Chunk* compilingChunk;
 
 /* Return the current chunk */
 static Chunk* currentChunk() {
-  return compilingChunk;
+  return &current->function->chunk;
 }
 
 /* ==================================
@@ -79,10 +88,24 @@ static Chunk* currentChunk() {
 ====================================*/
 
 /* Initialize a compiler and update the global variable */
-static void initCompiler(Compiler* compiler) {
+static void initCompiler(Compiler* compiler, FunctionType type) {
+  compiler->enclosing = current;
+  compiler->function = NULL;
+  compiler->type = type;
   compiler->localCount = 0;
   compiler->scopeDepth = 0;
+  compiler->function = newFunction();
   current = compiler;
+
+  if (type != TYPE_SCRIPT) {
+    current->function->name = copyString(parser.previous.start, parser.previous.length);
+  }
+
+  Local* local = &current->locals[current->localCount++];
+  local->depth = 0;
+  local->name.start = "";
+  local->name.length = 0;
+
 }
 
 
@@ -223,6 +246,7 @@ void emitLoop(int loopStart) {
 
 /* Emit Return opcode */
 static void emitReturn() {
+  emitByte(OP_NIL);
   emitByte(OP_RETURN);
 }
 
@@ -247,13 +271,22 @@ static void emitConstant(Value value) {
 /* ========= END ROUTINE ========= */
 
 /* End routine for the compiler */
-static void endCompiler() {
+static ObjFunction* endCompiler() {
   emitReturn();
+  /* Get the current function and return it to compile */
+  ObjFunction* function = current->function;
+
 #ifdef DEBUG_PRINT_CODE
     if (!parser.hadError) {
-      disassembleChunk(currentChunk(), "code");
+      /* If the function name is NULL (aka toplevel) return <script> else the function name*/
+      disassembleChunk(currentChunk(), function->name != NULL
+          ? function->name->chars : "<script>");
     }
 #endif
+
+  /* Jump back up one level */
+  current = current->enclosing;
+  return function;
 }
 
 /* ====================== SIGNATURES =================== */
@@ -293,6 +326,32 @@ static void binary(bool canAssign) {
     default:
       return; /* Unreachable */
   }
+}
+
+/* ============= FUNCTION CALL ========== */
+
+/* Compile the list of arguments of a function */
+static uint8_t argumentList() {
+  uint8_t argCount = 0;
+  if (!check(TOKEN_RIGHT_PAREN)) {
+    /* Count arguments */
+    do {
+      expression();
+      if (argCount == 255) {
+        error("Cannot have more than 255 arguments.");
+      }
+      argCount++;
+    } while(match(TOKEN_COMMA));
+  }
+  
+  consume(TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
+  return argCount;
+}
+
+/* Compile function call */
+static void call(bool canAssign) {
+  uint8_t argCount = argumentList();
+  emitBytes(OP_CALL, argCount);
 }
 
 /* ========= LITERAL =========== */
@@ -356,7 +415,7 @@ static void unary(bool canAssign) {
 /* ========= OPERATOR PRECEDENCE =========== */
 
 ParseRule rules[] = {
-  [TOKEN_LEFT_PAREN]    = {grouping, NULL,   PREC_NONE},
+  [TOKEN_LEFT_PAREN]    = {grouping, call,   PREC_NONE},
   [TOKEN_RIGHT_PAREN]   = {NULL,     NULL,   PREC_NONE},
   [TOKEN_LEFT_BRACE]    = {NULL,     NULL,   PREC_NONE},
   [TOKEN_RIGHT_BRACE]   = {NULL,     NULL,   PREC_NONE},
@@ -545,6 +604,8 @@ static uint8_t parseVariable(const char* errorMessage) {
 
 /* Mark a variable as initialized (change the flag -1) */
 static void markInitialized() {
+  /* Check if we are in the top level */
+  if (current->scopeDepth == 0) return;
   current->locals[current->localCount - 1].depth = current->scopeDepth;
 }
 
@@ -614,6 +675,8 @@ static void and_(bool canAssign) {
 }
 
 /* =========== OR ============== */
+
+/* Or compilation as a small if then else clause */
 static void or_(bool canAssign) {
   int elseJump = emitJump(OP_JUMP_IF_FALSE);
   int endJump = emitJump(OP_JUMP);
@@ -624,21 +687,6 @@ static void or_(bool canAssign) {
   parsePrecedence(PREC_OR);
   /* Second */
   patchJump(endJump);
-}
-
-
-/* ========== DECLARATION ============= */
-
-/* Declaration compilation */
-static void declaration() {
-  if (match(TOKEN_VAR)) {
-    varDeclaration();
-  } else {
-    statement();
-  }
-
-
-  if (parser.panicMode) synchronize();
 }
 
 /* ========== BLOCK =========== */
@@ -669,7 +717,54 @@ static void block() {
   consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
 
-/* ========== STATEMENT =========== */
+/* ========== FUNCTION =========== */
+
+static void function(FunctionType type) {
+  /* A new compiler is created for each function */
+  Compiler compiler;
+  initCompiler(&compiler, type);
+  beginScope();
+
+  /* Compile the parameter list*/
+  consume(TOKEN_LEFT_PAREN, "Expect '(' after function name.");
+  consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+
+  /* Compile the body */
+  consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.");
+  block();
+
+  /* Create the function object */
+  ObjFunction* function = endCompiler();
+  emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
+}
+
+/* Function declaration */
+static void funDeclaration() {
+  /* Works like a global variable */
+  uint8_t global = parseVariable("Expect function name.");
+  /* Two-phase variable definition can be shortened here */
+  markInitialized();
+  function(TYPE_FUNCTION);
+  defineVariable(global);
+}
+
+/* ========== DECLARATION ============= */
+
+/* Declaration compilation */
+static void declaration() {
+  if (match(TOKEN_FUN)) {
+    funDeclaration();
+  } else if (match(TOKEN_VAR)) {
+    varDeclaration();
+  } else {
+    statement();
+  }
+
+
+  if (parser.panicMode) synchronize();
+}
+
+/* ========== STATEMENTS =========== */
 
 /* Compile print */
 static void printStatement() {
@@ -791,12 +886,28 @@ static void forStatement() {
   endScope();
 }
 
+/* Return compilation */
+static void returnStatement() {
+  if (current->type == TYPE_SCRIPT) {
+    error("Cannot return from top-level code.");
+  }
+  if (match(TOKEN_SEMICOLON)) {
+    emitReturn();
+  } else {
+    expression();
+    consume(TOKEN_SEMICOLON, "Expect ';' after return value.");
+    emitByte(OP_RETURN);
+  }
+}
+
 /* Statement compilation */
 static void statement() {
   if (match(TOKEN_PRINT)) {
     printStatement();
   } else if (match(TOKEN_FOR)) {
     forStatement();
+  } else if (match(TOKEN_RETURN)) {
+    returnStatement();
   } else if (match(TOKEN_IF)) {
     ifStatement();
   } else if(match(TOKEN_WHILE)) {
@@ -815,12 +926,12 @@ static void statement() {
 ====================================*/
 
 /* Convert the tokens in chunks of bytecode */
-bool compile(const char* source, Chunk* chunk) {
+ObjFunction* compile(const char* source) {
   /* Initialize scanner and current chunk */
   initScanner(source);
   Compiler compiler;
-  initCompiler(&compiler);
-  compilingChunk = chunk;
+  initCompiler(&compiler, TYPE_SCRIPT);
+  compilingChunk = currentChunk();
 
   /* Set error and panic mode to false for initialization */
   parser.hadError = false;
@@ -831,6 +942,6 @@ bool compile(const char* source, Chunk* chunk) {
     declaration();
   }
 
-  endCompiler();
-  return !parser.hadError;
+  ObjFunction* function = endCompiler();
+  return parser.hadError ? NULL : function;
 }
