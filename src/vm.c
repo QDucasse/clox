@@ -24,7 +24,7 @@ static void resetStack() {
           NATIVE FUNCTION
 ====================================*/
 
-/* */
+/* Define a native function through the stack so everything can get gcd */
 static void defineNative(const char* name, NativeFn function) {
   /* The two values are pushed set then popped this is for the GC */
   push(OBJ_VAL(copyString(name, (int)strlen(name))));
@@ -118,7 +118,7 @@ static bool isFalsey(Value value) {
 static bool call(ObjFunction* function, int argCount) {
   /* Check number of arguments */
   if (argCount != function->arity) {
-    runtimeError("Expeted %d arguments but got %d", function->arity, argCount);
+    runtimeError("Expected %d arguments but got %d", function->arity, argCount);
     return false;
   }
   /* Check that a deep call chain is not overflowing the callframe array*/

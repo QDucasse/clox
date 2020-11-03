@@ -334,16 +334,15 @@ static void binary(bool canAssign) {
 static uint8_t argumentList() {
   uint8_t argCount = 0;
   if (!check(TOKEN_RIGHT_PAREN)) {
-    /* Count arguments */
     do {
       expression();
       if (argCount == 255) {
-        error("Cannot have more than 255 arguments.");
+        error("Can't have more than 255 arguments.");
       }
       argCount++;
-    } while(match(TOKEN_COMMA));
+    } while (match(TOKEN_COMMA));
   }
-  
+
   consume(TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
   return argCount;
 }
@@ -415,7 +414,7 @@ static void unary(bool canAssign) {
 /* ========= OPERATOR PRECEDENCE =========== */
 
 ParseRule rules[] = {
-  [TOKEN_LEFT_PAREN]    = {grouping, call,   PREC_NONE},
+  [TOKEN_LEFT_PAREN]    = {grouping, call,   PREC_CALL},
   [TOKEN_RIGHT_PAREN]   = {NULL,     NULL,   PREC_NONE},
   [TOKEN_LEFT_BRACE]    = {NULL,     NULL,   PREC_NONE},
   [TOKEN_RIGHT_BRACE]   = {NULL,     NULL,   PREC_NONE},
@@ -727,8 +726,18 @@ static void function(FunctionType type) {
 
   /* Compile the parameter list*/
   consume(TOKEN_LEFT_PAREN, "Expect '(' after function name.");
-  consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+  if (!check(TOKEN_RIGHT_PAREN)) {
+    do {
+      current->function->arity++;
+      if (current->function->arity > 255) {
+        errorAtCurrent("Can't have more than 255 parameters.");
+      }
 
+      uint8_t paramConstant = parseVariable("Expect parameter name.");
+      defineVariable(paramConstant);
+    } while (match(TOKEN_COMMA));
+  }
+  consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
   /* Compile the body */
   consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.");
   block();
