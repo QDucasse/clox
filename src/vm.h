@@ -24,10 +24,18 @@ typedef struct {
   Value stack[STACK_MAX];   /* Stack of values */
   Value* stackTop;          /* Pointer PAST the top item */
   ObjUpvalue* openUpvalues; /* Linked list of open upvalues */
+
   Table strings;            /* Table of all existing strings in the system */
   Table globals;            /* Table of all existing globals in the system */
 
   Obj* objects;           /* Pointer to the head of the objects linked list */
+
+  size_t bytesAllocated; /* Total bytes allocated by the VM */
+  size_t nextGC;         /* Threshld to trigger the next collection */
+
+  int grayCount;    /* Count of gray objects */
+  int grayCapacity; /* Max number of gray objects in the stack*/
+  Obj** grayStack;  /* Stack of gray objects */
 } VM;
 
 /* Chunk interpretation results */

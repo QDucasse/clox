@@ -40,7 +40,12 @@ non-0   | <oldSize | Shrink existing allocation
 non-0   | >oldSize | Grow existing allocation
 */
 void* reallocate(void* pointer, size_t oldSize, size_t newSize);
-
+/* GC main function */
+void collectGarbage();
+/* Mark a value for the GC - Test if object and pass to markObject */
+void markValue();
+/* Mark an object for the GC*/
+void markObject();
 /* Free the objects in the linked list */
 void freeObjects();
 

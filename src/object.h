@@ -37,6 +37,7 @@ typedef enum {
 /* Structure of an object -> allocated in the heap */
 struct sObj {
   ObjType type;
+  bool isMarked; /* For the GC */
   struct sObj* next;
 };
 

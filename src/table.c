@@ -79,6 +79,32 @@ ObjString* tableFindString(Table* table, const char* chars, int length, uint32_t
 }
 
 /* ==================================
+            GC MARKING
+====================================*/
+/* Remove white nodes from a table (aka unmarked) */
+void tableRemoveWhite(Table* table) {
+  /* Walk through every entry in the table */
+  for (int i = 0; i < table->capacity; i++) {
+    Entry* entry = &table->entries[i];
+    /* If the key is not marked delete the entry */
+    if (entry->key != NULL && !entry->key->obj.isMarked) {
+      tableDelete(table, entry->key);
+    }
+  }
+}
+
+/* Mark all the keys and values in a table */
+void markTable(Table* table) {
+  /* For all the entries -> Mark key strings and values */
+  for (int i = 0; i < table->capacity; i++) {
+    Entry* entry = &table->entries[i];
+    markObject((Obj*)entry->key);
+    markValue(entry->value);
+  }
+}
+
+
+/* ==================================
           SIZE OPERATIONS
 ====================================*/
 
