@@ -49,11 +49,18 @@ typedef struct {
   Precedence precedence; /* Precendence of an infix operator that uses that token as an operator */
 } ParseRule;
 
-/* Local variable */
+/* Local variable, used in a particular scope */
 typedef struct {
-  Token name; /* Identifier lexeme */
-  int depth;  /* Scope depth of the block where the local variable was declared */
+  Token name;      /* Identifier lexeme */
+  int depth;       /* Scope depth of the block where the local variable was declared */
+  bool isCaptured; /* Is currently captured as an upvalue (nested function declaration) */
 } Local;
+
+/* Upvalue, used in a scope from an enclosed one */
+typedef struct {
+  uint8_t index; /* local slot the upvalue is capturing */
+  bool isLocal;
+} Upvalue;
 
 /* Different types of function */
 typedef enum {
@@ -67,9 +74,10 @@ typedef struct Compiler {
   ObjFunction* function;      /* Implicit top-level main() function*/
   FunctionType type;          /* Compiler knows when it is in the top level*/
 
-  Local locals[UINT8_COUNT];  /* Local variables */
-  int localCount;             /* Number of local variables in scope */
-  int scopeDepth;             /* Number of blocks surrounding current code */
+  Local locals[UINT8_COUNT];     /* Array of local variables */
+  int localCount;                /* Number of local variables in scope */
+  Upvalue upvalues[UINT8_COUNT]; /* Array of upvalues */
+  int scopeDepth;                /* Number of blocks surrounding current code */
 } Compiler;
 
 /* Compiler global variable */
@@ -103,9 +111,9 @@ static void initCompiler(Compiler* compiler, FunctionType type) {
 
   Local* local = &current->locals[current->localCount++];
   local->depth = 0;
+  local->isCaptured = false;
   local->name.start = "";
   local->name.length = 0;
-
 }
 
 
@@ -192,7 +200,9 @@ static bool match(TokenType type) {
         BACK END - BYTECODE
 ====================================*/
 
-/* ======= BYTES ========= */
+/* ==================================
+           BYTE EMISSION
+====================================*/
 
 /* Add a byte to the current chunk */
 static void emitByte(uint8_t byte) {
@@ -206,6 +216,10 @@ static void emitBytes(uint8_t byte1, uint8_t byte2) {
   emitByte(byte1);
   emitByte(byte2);
 }
+
+/* ==================================
+           JUMP EMISSION
+====================================*/
 
 /* Emit a jump */
 static int emitJump(uint8_t instruction) {
@@ -230,6 +244,10 @@ static void patchJump(int offset) {
   currentChunk()->code[offset + 1] = jump & 0xff;
 }
 
+/* ==================================
+           LOOP EMISSION
+====================================*/
+
 /* Emit a loop body */
 void emitLoop(int loopStart) {
   emitByte(OP_LOOP);
@@ -242,7 +260,9 @@ void emitLoop(int loopStart) {
   emitByte(offset & 0xff);
 }
 
-/* ======= OP_RETURN ========= */
+/* ==================================
+           RETURN EMISSION
+====================================*/
 
 /* Emit Return opcode */
 static void emitReturn() {
@@ -250,7 +270,10 @@ static void emitReturn() {
   emitByte(OP_RETURN);
 }
 
-/* ======== OP_CONTANT ======== */
+/* ==================================
+          CONSTANT EMISSION
+====================================*/
+
 
 /* Create constant byte from value */
 static uint8_t makeConstant(Value value) {
@@ -268,7 +291,10 @@ static void emitConstant(Value value) {
   emitBytes(OP_CONSTANT, makeConstant(value));
 }
 
-/* ========= END ROUTINE ========= */
+/* ==================================
+            END ROUTINE
+====================================*/
+
 
 /* End routine for the compiler */
 static ObjFunction* endCompiler() {
@@ -289,7 +315,10 @@ static ObjFunction* endCompiler() {
   return function;
 }
 
-/* ====================== SIGNATURES =================== */
+/* ==================================
+        SIGNATURES FOR RULES
+====================================*/
+
 /* Signature definitions */
 static void expression();
 static void statement();
@@ -300,7 +329,10 @@ static void parsePrecedence(Precedence precedence);
 static void and_(bool canAssign);
 static void or_(bool canAssign);
 
-/* ======== BINARY OPERATION ========== */
+/* ==================================
+          BINARY OPERATION
+====================================*/
+
 
 /* Consumes the operator and the surrounding values */
 static void binary(bool canAssign) {
@@ -328,7 +360,10 @@ static void binary(bool canAssign) {
   }
 }
 
-/* ============= FUNCTION CALL ========== */
+/* ==================================
+          FUNCTION CALL
+====================================*/
+
 
 /* Compile the list of arguments of a function */
 static uint8_t argumentList() {
@@ -353,7 +388,10 @@ static void call(bool canAssign) {
   emitBytes(OP_CALL, argCount);
 }
 
-/* ========= LITERAL =========== */
+/* ==================================
+              LITERAL
+====================================*/
+
 
 /* Literal definition for nil, false and true */
 static void literal(bool canAssign) {
@@ -366,7 +404,10 @@ static void literal(bool canAssign) {
   }
 }
 
-/* ======== GROUPING ========== */
+/* ==================================
+            GROUPING
+====================================*/
+
 
 /* Consume the expression and the closing parenthesis */
 static void grouping(bool canAssign){
@@ -376,7 +417,10 @@ static void grouping(bool canAssign){
 }
 
 
-/* ======= NUMBER ========= */
+/* ==================================
+              NUMBER
+====================================*/
+
 
 /* Expression for number */
 static void number(bool canAssign) {
@@ -385,14 +429,19 @@ static void number(bool canAssign) {
   emitConstant(NUMBER_VAL(value));
 }
 
-/* =========== STRING =========== */
+/* ==================================
+              STRING
+====================================*/
+
 /* Creates a string from the token */
 static void string(bool canAssign) {
   emitConstant(OBJ_VAL(copyString(parser.previous.start + 1,
                                   parser.previous.length -2)));
 }
 
-/* ======== UNARY OPERATORS ========== */
+/* ==================================
+          UNARY OPERATORS
+====================================*/
 
 /* Consumes the operand and emit the operator instruction */
 static void unary(bool canAssign) {
@@ -411,8 +460,11 @@ static void unary(bool canAssign) {
   }
 }
 
-/* ========= OPERATOR PRECEDENCE =========== */
+/* ==================================
+        OPERATOR PRECEDENCE
+====================================*/
 
+/* Rules with "element" = prefix rule | infix rule | precedence */
 ParseRule rules[] = {
   [TOKEN_LEFT_PAREN]    = {grouping, call,   PREC_CALL},
   [TOKEN_RIGHT_PAREN]   = {NULL,     NULL,   PREC_NONE},
@@ -487,7 +539,10 @@ static ParseRule* getRule(TokenType type) {
   return &rules[type];
 }
 
-/* ========== SYNCHRONIZATION ============= */
+/* ==================================
+          SYNCHRONIZATION
+====================================*/
+
 static void synchronize() {
   parser.panicMode = false;
   /* Look for a statement boundary */
@@ -512,7 +567,10 @@ static void synchronize() {
   }
 }
 
-/* ========== EXPRESSION ============= */
+/* ==================================
+            EXPRESSION
+====================================*/
+
 
 /* Expression compilation */
 static void expression() {
@@ -534,7 +592,9 @@ static bool identifiersEqual(Token* a, Token* b) {
   return memcmp(a->start, b->start, a->length) == 0;
 }
 
-/* ===== VARIABLE DECLARATION ===== */
+/* ==================================
+         LOCAL VARIABLE
+====================================*/
 
 /* Return the index of the local variable in the table */
 static int resolveLocal(Compiler* compiler, Token* name) {
@@ -563,7 +623,60 @@ static void addLocal(Token name) {
   Local* local = &current->locals[current->localCount++];
   local->name = name;
   local->depth = -1; /* flag sentinel as uninitialized*/
+  local->isCaptured = false; /* By default living as a simple local */
 }
+
+/* ==================================
+              UPVALUE
+====================================*/
+
+/* Add an upvalue to the closure */
+static int addUpvalue(Compiler* compiler, uint8_t index, bool isLocal) {
+  /* Get the number of upvalues stored in the function */
+  int upvalueCount = compiler->function->upvalueCount;
+
+  /* Check if an upvalue with the same index (aka pointing to the ame variable) already exists */
+  for (int i = 0; i < upvalueCount; i++) {
+    Upvalue* upvalue = &compiler->upvalues[i];
+    if (upvalue->index == index && upvalue->isLocal == isLocal) {
+      return i;
+    }
+  }
+
+  if (upvalueCount == UINT8_COUNT) {
+    error("Too many closure variables in function.");
+    return 0;
+  }
+
+  /* Store the upvalue at the given index in the upvalues array */
+  compiler->upvalues[upvalueCount].isLocal = isLocal;
+  compiler->upvalues[upvalueCount].index = index;
+  return compiler->function->upvalueCount++;
+}
+
+/* Resolve an upvalue */
+static int resolveUpvalue(Compiler* compiler, Token* name) {
+  /* Top most level and the value SHOULD be global */
+  if(compiler->enclosing == NULL) return -1;
+  /* Resolve as a local in the enclosing compiler -> look for it right outside */
+  int local = resolveLocal(compiler->enclosing, name);
+  if (local != -1) {
+    compiler->enclosing->locals[local].isCaptured = true; /* The local got captured */
+    return addUpvalue(compiler, (uint8_t)local, true);
+  }
+
+  /* Look for a matching local variable beyond the immediately enclosing function */
+  int upvalue = resolveUpvalue(compiler->enclosing, name);
+  if(upvalue != -1) {
+    return addUpvalue(compiler, (uint8_t)upvalue, false); /* passes false for isLocal */
+  }
+
+  return -1;
+}
+
+/* ==================================
+         VARIABLE DECLARATION
+====================================*/
 
 /* Declare a variable, the compiler records its existence */
 static void declareVariable() {
@@ -641,6 +754,9 @@ static void namedVariable(Token name, bool canAssign) {
     if (arg != -1) {
       getOp = OP_GET_LOCAL;
       setOp = OP_SET_LOCAL;
+    } else if ((arg = resolveUpvalue(current, &name)) != -1) {
+      getOp = OP_GET_UPVALUE;
+      setOp = OP_SET_UPVALUE;
     } else {
       arg = identifierConstant(&name);
       getOp = OP_GET_GLOBAL;
@@ -660,7 +776,9 @@ static void variable(bool canAssign) {
   namedVariable(parser.previous, canAssign);
 }
 
-/* =========== AND ============== */
+/* ==================================
+              AND
+====================================*/
 
 /* And compilation as a small if then else clause */
 static void and_(bool canAssign) {
@@ -673,7 +791,9 @@ static void and_(bool canAssign) {
   patchJump(endJump);
 }
 
-/* =========== OR ============== */
+/* ==================================
+              OR
+====================================*/
 
 /* Or compilation as a small if then else clause */
 static void or_(bool canAssign) {
@@ -688,7 +808,9 @@ static void or_(bool canAssign) {
   patchJump(endJump);
 }
 
-/* ========== BLOCK =========== */
+/* ==================================
+              BLOCK
+====================================*/
 
 /* Notify scope beginning by incrementing depth */
 static void beginScope() {
@@ -701,7 +823,12 @@ static void endScope() {
 
   while (current->localCount > 0 &&
          current->locals[current->localCount - 1].depth > current->scopeDepth) {
-           emitByte(OP_POP);
+           /* If the current local is captured -> closed upvalue, else simply pop */
+           if (current->locals[current->localCount - 1].isCaptured) {
+             emitByte(OP_CLOSE_UPVALUE);
+           } else {
+             emitByte(OP_POP);
+           }
            current->localCount--;
          }
 }
@@ -716,7 +843,9 @@ static void block() {
   consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
 
-/* ========== FUNCTION =========== */
+/* ==================================
+              FUNCTION
+====================================*/
 
 static void function(FunctionType type) {
   /* A new compiler is created for each function */
@@ -744,7 +873,15 @@ static void function(FunctionType type) {
 
   /* Create the function object */
   ObjFunction* function = endCompiler();
-  emitBytes(OP_CONSTANT, makeConstant(OBJ_VAL(function)));
+  emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
+
+  for (int i = 0; i < function->upvalueCount; i++) {
+    /* First byte 1 -> local in the enclosing
+                  0 -> upvalue
+       Second byte index */
+    emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
+    emitByte(compiler.upvalues[i].index);
+  }
 }
 
 /* Function declaration */
@@ -757,7 +894,9 @@ static void funDeclaration() {
   defineVariable(global);
 }
 
-/* ========== DECLARATION ============= */
+/* ==================================
+            DECLARATION
+====================================*/
 
 /* Declaration compilation */
 static void declaration() {
@@ -773,7 +912,9 @@ static void declaration() {
   if (parser.panicMode) synchronize();
 }
 
-/* ========== STATEMENTS =========== */
+/* ==================================
+           STATEMENTS
+====================================*/
 
 /* Compile print */
 static void printStatement() {

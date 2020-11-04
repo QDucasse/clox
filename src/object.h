@@ -9,6 +9,8 @@
 #define OBJ_TYPE(value)    (AS_OBJ(value)->type)
 /* Check if the value is a string */
 #define IS_STRING(value)   isObjType(value, OBJ_STRING)
+/* Check if the value is a closure */
+#define IS_CLOSURE(value) isObjType(value, OBJ_CLOSURE)
 /* Check if the value is a function */
 #define IS_FUNCTION(value) isObjType(value, OBJ_FUNCTION)
 /* Check if the value is a native function */
@@ -17,12 +19,16 @@
 #define AS_STRING(value)   ((ObjString*)AS_OBJ(value))
 /* Conversion value string and outputs the characters */
 #define AS_CSTRING(value)  (((ObjString*)AS_OBJ(value))->chars)
+/* Conversion to closure */
+#define AS_CLOSURE(value) ((ObjClosure*)AS_OBJ(value))
 /* Conversion to function object */
 #define AS_FUNCTION(value) ((ObjFunction*)AS_OBJ(value))
 /* Conversion to function object */
 #define AS_NATIVE(value) (((ObjNative*)AS_OBJ(value))->function)
 
 typedef enum {
+  OBJ_CLOSURE,
+  OBJ_UPVALUE,
   OBJ_FUNCTION,
   OBJ_NATIVE,
   OBJ_STRING
@@ -38,9 +44,26 @@ struct sObj {
 typedef struct {
   Obj obj;          /* State of the object, shared among all Objects */
   int arity;        /* Number of arguments */
+  int upvalueCount; /* Number of upvalues defined in the function */
   Chunk chunk;      /* Dedicated chunk */
   ObjString* name;  /* Name of the function */
 } ObjFunction;
+
+/* Upvalue object */
+typedef struct ObjUpvalue {
+  Obj obj;                 /* State of the object, shared among all objects */
+  Value* location;         /* Location in the stack variable */
+  Value closed;            /* Keep the value of the closed upvalue (if it becomes one ) */
+  struct ObjUpvalue* next; /* Pointer to the next ObjUpvalue*/
+} ObjUpvalue;
+
+/* Representation of a closure */
+typedef struct {
+  Obj obj;               /* Obj state */
+  ObjFunction* function; /* Enclosed function */
+  ObjUpvalue** upvalues; /* List of upvalues */
+  int upvalueCount;      /* Number of upvalues in the array */
+} ObjClosure;
 
 /* Native function */
 typedef Value (*NativeFn)(int argCount, Value* args);
@@ -63,6 +86,12 @@ struct sObjString {
 
 /* New function creation */
 ObjFunction* newFunction();
+
+/* New upvalue */
+ObjUpvalue* newUpvalue(Value* slot);
+
+/* New closure */
+ObjClosure* newClosure(ObjFunction* function);
 
 /* New native function */
 ObjNative* newNative(NativeFn function);

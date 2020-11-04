@@ -3,6 +3,10 @@
 #include "memory.h"
 #include "vm.h"
 
+/* ======================
+      REALLOCATION
+====================== */
+
 /* Memory reallocation */
 void* reallocate(void* pointer, size_t oldSize, size_t newSize) {
   /* Free option */
@@ -17,13 +21,22 @@ void* reallocate(void* pointer, size_t oldSize, size_t newSize) {
   return result;
 }
 
+/* ======================
+      FREE OBJECTS
+====================== */
+
 /* Free an object in the linked list */
 static void freeObject(Obj* object) {
   switch (object->type) {
-    case OBJ_STRING: {
-      ObjString* string = (ObjString*)object;
-      FREE_ARRAY(char, string->chars, string->length + 1);
-      FREE(ObjString, object);
+    case OBJ_CLOSURE: {
+      ObjClosure* closure = (ObjClosure*)object;
+      /* Free upvalues array */
+      FREE_ARRAY(ObjUpvalue*, closure->upvalues, closure->upvalueCount);
+      FREE(ObjClosure, object);
+      break;
+    }
+    case OBJ_UPVALUE: {
+      FREE(ObjUpvalue, object);
       break;
     }
     case OBJ_FUNCTION: {
@@ -34,6 +47,12 @@ static void freeObject(Obj* object) {
     }
     case OBJ_NATIVE: {
       FREE(ObjNative, object);
+      break;
+    }
+    case OBJ_STRING: {
+      ObjString* string = (ObjString*)object;
+      FREE_ARRAY(char, string->chars, string->length + 1);
+      FREE(ObjString, object);
       break;
     }
   }
