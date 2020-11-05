@@ -10,7 +10,7 @@
 /* Check if the value is a string */
 #define IS_STRING(value)   isObjType(value, OBJ_STRING)
 /* Check if the value is a closure */
-#define IS_CLOSURE(value) isObjType(value, OBJ_CLOSURE)
+#define IS_CLOSURE(value)  isObjType(value, OBJ_CLOSURE)
 /* Check if the value is a function */
 #define IS_FUNCTION(value) isObjType(value, OBJ_FUNCTION)
 /* Check if the value is a native function */
@@ -20,11 +20,11 @@
 /* Conversion value string and outputs the characters */
 #define AS_CSTRING(value)  (((ObjString*)AS_OBJ(value))->chars)
 /* Conversion to closure */
-#define AS_CLOSURE(value) ((ObjClosure*)AS_OBJ(value))
+#define AS_CLOSURE(value)  ((ObjClosure*)AS_OBJ(value))
 /* Conversion to function object */
 #define AS_FUNCTION(value) ((ObjFunction*)AS_OBJ(value))
 /* Conversion to function object */
-#define AS_NATIVE(value) (((ObjNative*)AS_OBJ(value))->function)
+#define AS_NATIVE(value)   (((ObjNative*)AS_OBJ(value))->function)
 
 typedef enum {
   OBJ_CLOSURE,
@@ -35,11 +35,11 @@ typedef enum {
 } ObjType;
 
 /* Structure of an object -> allocated in the heap */
-struct sObj {
+typedef struct sObj {
   ObjType type;
   bool isMarked; /* For the GC */
   struct sObj* next;
-};
+} Obj;
 
 /* Representation of a function object in the stack */
 typedef struct {
