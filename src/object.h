@@ -3,10 +3,15 @@
 
 #include "common.h"
 #include "chunk.h"
+#include "table.h"
 #include "value.h"
 
 /* Macro to extract the type from the object */
 #define OBJ_TYPE(value)    (AS_OBJ(value)->type)
+/* Check if the value is a class */
+#define IS_CLASS(value)   isObjType(value, OBJ_CLASS)
+/* Check if the value is an instance */
+#define IS_INSTANCE(value) isObjType(value, OBJ_INSTANCE)
 /* Check if the value is a string */
 #define IS_STRING(value)   isObjType(value, OBJ_STRING)
 /* Check if the value is a closure */
@@ -15,6 +20,10 @@
 #define IS_FUNCTION(value) isObjType(value, OBJ_FUNCTION)
 /* Check if the value is a native function */
 #define IS_NATIVE(value)   isObjType(value, OBJ_NATIVE)
+/* Conversion to class */
+#define AS_CLASS(value)    ((ObjClass*)AS_OBJ(value))
+/* Conversion to instance */
+#define AS_INSTANCE(value) ((ObjInstance*)AS_OBJ(value))
 /* Conversion value string */
 #define AS_STRING(value)   ((ObjString*)AS_OBJ(value))
 /* Conversion value string and outputs the characters */
@@ -27,6 +36,8 @@
 #define AS_NATIVE(value)   (((ObjNative*)AS_OBJ(value))->function)
 
 typedef enum {
+  OBJ_CLASS,
+  OBJ_INSTANCE,
   OBJ_CLOSURE,
   OBJ_UPVALUE,
   OBJ_FUNCTION,
@@ -66,6 +77,19 @@ typedef struct {
   int upvalueCount;      /* Number of upvalues in the array */
 } ObjClosure;
 
+/* Representation of a class */
+typedef struct {
+  Obj obj;
+  ObjString* name;
+} ObjClass;
+
+/* Representation of an instance */
+typedef struct {
+  Obj obj;
+  ObjClass* klass;  /* Pointer to the class it is instance of*/
+  Table fields;     /* Instance fields (state etc.) */
+} ObjInstance;
+
 /* Native function */
 typedef Value (*NativeFn)(int argCount, Value* args);
 
@@ -84,6 +108,12 @@ struct sObjString {
 };
 
 /* Struct inheritance, safe cast from ObjString to Obj (its first field) */
+
+/* New class creation */
+ObjClass* newClass(ObjString* name);
+
+/* New instance creation */
+ObjInstance* newInstance(ObjClass* klass);
 
 /* New function creation */
 ObjFunction* newFunction();

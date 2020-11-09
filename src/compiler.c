@@ -329,6 +329,7 @@ static ParseRule* getRule(TokenType type);
 static void parsePrecedence(Precedence precedence);
 static void and_(bool canAssign);
 static void or_(bool canAssign);
+static void dot(bool canAssign);
 
 /* ==================================
           BINARY OPERATION
@@ -471,7 +472,7 @@ ParseRule rules[] = {
   [TOKEN_RIGHT_PAREN]   = {NULL,     NULL,   PREC_NONE},
   [TOKEN_LEFT_BRACE]    = {NULL,     NULL,   PREC_NONE},
   [TOKEN_RIGHT_BRACE]   = {NULL,     NULL,   PREC_NONE},
-  [TOKEN_COMMA]         = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_COMMA]         = {NULL,     dot,    PREC_CALL},
   [TOKEN_DOT]           = {NULL,     NULL,   PREC_NONE},
   [TOKEN_MINUS]         = {unary,    binary, PREC_TERM},
   [TOKEN_PLUS]          = {NULL,     binary, PREC_TERM},
@@ -810,6 +811,23 @@ static void or_(bool canAssign) {
 }
 
 /* ==================================
+           DOT (GET SET)
+=================================== */
+
+static void dot(bool canAssign) {
+  consume(TOKEN_IDENTIFIER, "Expect property name after '.'.");
+  uint8_t name = identifierConstant(&parser.previous);
+  /* If equal detected -> set, else -> get */
+  /* canAssign is here to prevent expressions such as a + b.c = 3*/
+  if (canAssign && match(TOKEN_EQUAL)) {
+    expression();
+    emitBytes(OP_SET_PROPERTY, name);
+  } else {
+    emitBytes(OP_GET_PROPERTY, name);
+  }
+}
+
+/* ==================================
               BLOCK
 =================================== */
 
@@ -895,13 +913,33 @@ static void funDeclaration() {
   defineVariable(global);
 }
 
+
+/* ==================================
+            CLASS
+=================================== */
+
+static void classDeclaration() {
+  /* Add the name around the class */
+  consume(TOKEN_IDENTIFIER, "Expect class name.");
+  uint8_t nameConstant = identifierConstant(&parser.previous);
+  declareVariable();
+  /* Create the class object at runtime */
+  emitBytes(OP_CLASS, nameConstant);
+  defineVariable(nameConstant);
+  /* Consume class body */
+  consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+  consume(TOKEN_RIGHT_BRACE, "Expect '}' before class body.");
+}
+
 /* ==================================
             DECLARATION
 =================================== */
 
 /* Declaration compilation */
 static void declaration() {
-  if (match(TOKEN_FUN)) {
+  if(match(TOKEN_CLASS)) {
+    classDeclaration();
+  } else if (match(TOKEN_FUN)) {
     funDeclaration();
   } else if (match(TOKEN_VAR)) {
     varDeclaration();

@@ -51,6 +51,16 @@ static void freeObject(Obj* object) {
   printf("%p free type %d\n", (void*)object, object->type);
 #endif
   switch (object->type) {
+    case OBJ_INSTANCE: {
+      ObjInstance* instance = (ObjInstance*)instance;
+      freeTable(&instance->fields);
+      FREE(ObjInstance, object);
+      break;
+    }
+    case OBJ_CLASS: {
+      FREE(ObjClass, object);
+      break;
+    }
     case OBJ_CLOSURE: {
       ObjClosure* closure = (ObjClosure*)object;
       /* Free upvalues array */
@@ -145,6 +155,17 @@ static void blackenObject(Obj* object) {
   printf("\n");
 #endif
   switch (object->type) {
+    case OBJ_INSTANCE: {
+      ObjInstance* instance = (ObjInstance*)object;
+      markObject((Obj*)instance->klass);
+      markTable(&instance->fields);
+      break;
+    }
+    case OBJ_CLASS: {
+      ObjClass* klass = (ObjClass*)object;
+      markObject((Obj*)klass->name);
+      break;
+    }
     case OBJ_CLOSURE: {
       ObjClosure* closure = (ObjClosure*)object;
       /* Mark the enclosed function */

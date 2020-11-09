@@ -147,10 +147,15 @@ static bool call(ObjClosure* closure, int argCount) {
   return true;
 }
 
-/* Check if the callee reslly is a function */
+/* Check if the callee really is a function */
 static bool callValue(Value callee, int argCount) {
   if(IS_OBJ(callee)) {
     switch(OBJ_TYPE(callee)) {
+      case OBJ_CLASS: {
+        ObjClass* klass = AS_CLASS(callee);
+        vm.stackTop[-argCount-1] = OBJ_VAL(newInstance(klass));
+        return true;
+      }
       case OBJ_CLOSURE:
         return call(AS_CLOSURE(callee), argCount);
       case OBJ_NATIVE: {
@@ -420,6 +425,48 @@ static InterpretResult run() {
             closure->upvalues[i] = frame->closure->upvalues[index];
           }
         }
+        break;
+      }
+
+      case OP_CLASS:
+        push(OBJ_VAL(newClass(READ_STRING())));
+        break;
+
+      case OP_GET_PROPERTY: {
+        /* Resulting instance is already on top of the stack */
+        /* Check if REALLY is an instance */
+        if (!IS_INSTANCE(peek(0))) {
+          runtimeError("Only instances have properties.");
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        ObjInstance* instance = AS_INSTANCE(peek(0));
+
+        /* Name of the field */
+        ObjString* name = READ_STRING();
+        /* Look for it in the fields table */
+        Value value;
+        if (tableGet(&instance->fields, name, &value)) {
+          pop(); // Instance
+          push(value);
+          break;
+        }
+
+        runtimeError("Undefined property '%s'.", name->chars);
+        return INTERPRET_RUNTIME_ERROR;
+      }
+
+      case OP_SET_PROPERTY: {
+        if (!IS_INSTANCE(peek(1))) {
+          runtimeError("Only instances have fields.");
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        /* Top of the stack: value THEN instance */
+        ObjInstance* instance = AS_INSTANCE(peek(1));
+        tableSet(&instance->fields, READ_STRING(), peek(0));
+
+        Value value = pop(); // Stored value
+        pop();               // Instance
+        push(value);         // Push the value back
         break;
       }
 
