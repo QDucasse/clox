@@ -7,35 +7,40 @@
 #include "value.h"
 
 /* Macro to extract the type from the object */
-#define OBJ_TYPE(value)    (AS_OBJ(value)->type)
+#define OBJ_TYPE(value)        (AS_OBJ(value)->type)
 /* Check if the value is a class */
-#define IS_CLASS(value)   isObjType(value, OBJ_CLASS)
+#define IS_CLASS(value)        isObjType(value, OBJ_CLASS)
 /* Check if the value is an instance */
-#define IS_INSTANCE(value) isObjType(value, OBJ_INSTANCE)
+#define IS_INSTANCE(value)     isObjType(value, OBJ_INSTANCE)
+/* Check if the value is a bound method */
+#define IS_BOUND_METHOD(value) isObjType(value, OBJ_BOUND_METHOD)
 /* Check if the value is a string */
-#define IS_STRING(value)   isObjType(value, OBJ_STRING)
+#define IS_STRING(value)       isObjType(value, OBJ_STRING)
 /* Check if the value is a closure */
-#define IS_CLOSURE(value)  isObjType(value, OBJ_CLOSURE)
+#define IS_CLOSURE(value)      isObjType(value, OBJ_CLOSURE)
 /* Check if the value is a function */
-#define IS_FUNCTION(value) isObjType(value, OBJ_FUNCTION)
+#define IS_FUNCTION(value)     isObjType(value, OBJ_FUNCTION)
 /* Check if the value is a native function */
-#define IS_NATIVE(value)   isObjType(value, OBJ_NATIVE)
+#define IS_NATIVE(value)       isObjType(value, OBJ_NATIVE)
+/* Conversion to bound method */
+#define AS_BOUND_METHOD(value) ((ObjBoundMethod*)AS_OBJ(value))
 /* Conversion to class */
-#define AS_CLASS(value)    ((ObjClass*)AS_OBJ(value))
+#define AS_CLASS(value)        ((ObjClass*)AS_OBJ(value))
 /* Conversion to instance */
-#define AS_INSTANCE(value) ((ObjInstance*)AS_OBJ(value))
+#define AS_INSTANCE(value)     ((ObjInstance*)AS_OBJ(value))
 /* Conversion value string */
-#define AS_STRING(value)   ((ObjString*)AS_OBJ(value))
+#define AS_STRING(value)       ((ObjString*)AS_OBJ(value))
 /* Conversion value string and outputs the characters */
-#define AS_CSTRING(value)  (((ObjString*)AS_OBJ(value))->chars)
+#define AS_CSTRING(value)      (((ObjString*)AS_OBJ(value))->chars)
 /* Conversion to closure */
-#define AS_CLOSURE(value)  ((ObjClosure*)AS_OBJ(value))
+#define AS_CLOSURE(value)      ((ObjClosure*)AS_OBJ(value))
 /* Conversion to function object */
-#define AS_FUNCTION(value) ((ObjFunction*)AS_OBJ(value))
+#define AS_FUNCTION(value)     ((ObjFunction*)AS_OBJ(value))
 /* Conversion to function object */
-#define AS_NATIVE(value)   (((ObjNative*)AS_OBJ(value))->function)
+#define AS_NATIVE(value)       (((ObjNative*)AS_OBJ(value))->function)
 
 typedef enum {
+  OBJ_BOUND_METHOD,
   OBJ_CLASS,
   OBJ_INSTANCE,
   OBJ_CLOSURE,
@@ -81,6 +86,7 @@ typedef struct {
 typedef struct {
   Obj obj;
   ObjString* name;
+  Table methods;
 } ObjClass;
 
 /* Representation of an instance */
@@ -89,6 +95,13 @@ typedef struct {
   ObjClass* klass;  /* Pointer to the class it is instance of*/
   Table fields;     /* Instance fields (state etc.) */
 } ObjInstance;
+
+/* Representation of a bound method */
+typedef struct {
+  Obj obj;
+  Value receiver;     /* The receiver of the method */
+  ObjClosure* method; /* The method to apply to the receiver */
+} ObjBoundMethod;
 
 /* Native function */
 typedef Value (*NativeFn)(int argCount, Value* args);
@@ -100,14 +113,17 @@ typedef struct {
 } ObjNative;
 
 /* Structure of a string (object) */
-struct sObjString {
+typedef struct sObjString{
   Obj obj;     /* State of the object, shared among all Objects */
   int length;  /* Length of the string */
   char* chars; /* Charaters composing the string */
   uint32_t hash; /* Hash of the string */
-};
+} ObjString;
 
 /* Struct inheritance, safe cast from ObjString to Obj (its first field) */
+
+/* New Bound method creation */
+ObjBoundMethod* newBoundMethod(Value receiver, ObjClosure* method);
 
 /* New class creation */
 ObjClass* newClass(ObjString* name);

@@ -23,6 +23,7 @@ typedef struct {
   uint8_t* ip;              /* instruction pointer (or program counter. Always points to the instruction ABOUT TO BE EXECUTED */
   Value stack[STACK_MAX];   /* Stack of values */
   Value* stackTop;          /* Pointer PAST the top item */
+  ObjString* initString;    /* 'init' string hardcoded for faster lookup */
   ObjUpvalue* openUpvalues; /* Linked list of open upvalues */
 
   Table strings;            /* Table of all existing strings in the system */

@@ -26,6 +26,17 @@ static int constantInstruction(const char* name, Chunk* chunk, int offset) {
   return offset + 2;
 }
 
+/* Helper to display the method name and argument count of a method invokation */
+static int invokeInstruction(const char* name, Chunk* chunk, int offset) {
+  /* Name and argcount*/
+  uint8_t constant = chunk->code[offset + 1];
+  uint8_t argCount = chunk->code[offset + 2];
+  printf("%-16s (%d args) %4d", name, argCount, constant);
+  printValue(chunk->constants.values[constant]);
+  printf("'\n");
+  return offset + 3;
+}
+
 /* Helper to display the name and slot number */
 static int byteInstruction(const char* name, Chunk* chunk,
                            int offset) {
@@ -103,6 +114,10 @@ int disassembleInstruction(Chunk* chunk, int offset) {
 
     case OP_CLASS:
       return constantInstruction("OP_CLASS", chunk, offset);
+    case OP_METHOD:
+      return constantInstruction("OP_METHOD", chunk, offset);
+    case OP_INVOKE:
+      return invokeInstruction("OP_INVOKE", chunk, offset);
 
     case OP_NIL:
       return simpleInstruction("OP_NIL", offset);
