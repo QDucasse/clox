@@ -85,8 +85,9 @@ typedef struct Compiler {
 
 /* Store the innermost class infos */
 typedef struct ClassCompiler {
-  struct ClassCompiler* enclosing;
-  Token name;
+  struct ClassCompiler* enclosing; /* Pointer to the enclosing class */
+  Token name;                      /* Name of the current class */
+  bool hasSuperclass;              /* Flag to state if the current class has a superclass */
 } ClassCompiler;
 
 /* Compiler global variable */
@@ -354,6 +355,7 @@ static void and_(bool canAssign);
 static void or_(bool canAssign);
 static void dot(bool canAssign);
 static void this_(bool canAssign);
+static void super_(bool canAssign);
 
 /* ==================================
           BINARY OPERATION
@@ -525,7 +527,7 @@ ParseRule rules[] = {
   [TOKEN_OR]            = {NULL,     or_,    PREC_OR},
   [TOKEN_PRINT]         = {NULL,     NULL,   PREC_NONE},
   [TOKEN_RETURN]        = {NULL,     NULL,   PREC_NONE},
-  [TOKEN_SUPER]         = {NULL,     NULL,   PREC_NONE},
+  [TOKEN_SUPER]         = {super_,   NULL,   PREC_NONE},
   [TOKEN_THIS]          = {this_,    NULL,   PREC_NONE},
   [TOKEN_TRUE]          = {literal,  NULL,   PREC_NONE},
   [TOKEN_VAR]           = {NULL,     NULL,   PREC_NONE},
@@ -802,6 +804,14 @@ static void variable(bool canAssign) {
   namedVariable(parser.previous, canAssign);
 }
 
+/* Create a synthetic token for a given function string */
+static Token syntheticToken(const char* text) {
+  Token token;
+  token.start = text;
+  token.length = (int)strlen(text);
+  return token;
+}
+
 /* ==================================
               AND
 =================================== */
@@ -847,6 +857,36 @@ static void this_(bool canAssign) {
   }
   variable(false);
 }
+
+/* ==================================
+              SUPER
+=================================== */
+
+static void super_(bool canAssign) {
+  /* Check if in class and if in a class that has a superclass */
+  if (currentClass == NULL) {
+    error("Cannot use 'super' outside of a class.");
+  } else if (!currentClass->hasSuperclass) {
+    error("Cannot use 'super' in a class with no superclass.");
+  }
+  consume(TOKEN_DOT, "Expect '.' after 'super'." );
+  consume(TOKEN_IDENTIFIER, "Expect superclass method name.");
+  /* Superclass' method name */
+  uint8_t name = identifierConstant(&parser.previous);
+
+  /* Remember the current instance AND the superclass */
+  namedVariable(syntheticToken("this"), false);
+  if (match(TOKEN_LEFT_PAREN)) {
+    uint8_t argCount = argumentList();
+    namedVariable(syntheticToken("super"), false);
+    emitBytes(OP_SUPER_INVOKE, name);
+    emitByte(argCount);
+  } else {
+    namedVariable(syntheticToken("super"),false);
+    emitBytes(OP_GET_SUPER, name);
+  }
+}
+
 
 /* ==================================
            DOT (GET SET)
@@ -993,7 +1033,27 @@ static void classDeclaration() {
   ClassCompiler classCompiler;
   classCompiler.name = parser.previous;
   classCompiler.enclosing = currentClass;
+  classCompiler.hasSuperclass = false;
   currentClass = &classCompiler;
+
+  /* Inheritance, detect superclass with token '<' */
+  if (match(TOKEN_LESS)) {
+    consume(TOKEN_IDENTIFIER, "Expect superclass name.");
+    variable(false);
+    namedVariable(className, false);
+    emitByte(OP_INHERIT);
+    classCompiler.hasSuperclass = true;
+  }
+
+  /* Check if the class inherits from itself */
+  if (identifiersEqual(&className, &parser.previous)) {
+    error("A class cannot inherit from itself");
+  }
+
+  /* Creation of a new lexical scope and add super as a local to it */
+  beginScope();
+  addLocal(syntheticToken("super"));
+  defineVariable(0);
 
   /* Load the variable with the name class name
   -> Top of the stack is the closure for the method with the class under it*/
@@ -1005,6 +1065,11 @@ static void classDeclaration() {
   }
   consume(TOKEN_RIGHT_BRACE, "Expect '}' before class body.");
   emitByte(OP_POP);
+
+  /* Close lexical scope */
+  if (classCompiler.hasSuperclass) {
+    endScope();
+  }
 
   /* Get the innermost class pointer up one level */
   currentClass = currentClass->enclosing;

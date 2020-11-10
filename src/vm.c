@@ -516,6 +516,20 @@ static InterpretResult run() {
         break;
       }
 
+      case OP_SUPER_INVOKE: {
+        /* Pass method name, argument count and superclass name */
+        ObjString* method = READ_STRING();
+        int argCount = READ_BYTE();
+        ObjClass* superclass = AS_CLASS(pop());
+        /* Try to create a call with the given arity and name */
+        /* Create a new callframe */
+        if (!invokeFromClass(superclass, method, argCount)) {
+          return INTERPRET_RUNTIME_ERROR;
+        }
+        /* Refresh the call frame to be up to date with the invoke created one */
+        frame = &vm.frames[vm.frameCount - 1];
+        break;
+      }
       case OP_CLOSURE: {
         ObjFunction* function = AS_FUNCTION(READ_CONSTANT());
         ObjClosure* closure = newClosure(function);
@@ -537,6 +551,22 @@ static InterpretResult run() {
       case OP_CLASS:
         push(OBJ_VAL(newClass(READ_STRING())));
         break;
+
+      case OP_INHERIT: {
+        /* Superclass with subclass on top */
+        Value superclass = peek(1); // super
+        /* Check if the superclass is indeed a class */
+        if (!IS_CLASS(superclass)) {
+          runtimeError("Superclass must be a class.");
+          return INTERPRET_RUNTIME_ERROR;
+        }
+
+        ObjClass* subclass = AS_CLASS(peek(0)); // sub
+        /* Copy all the inherited methods down to the subclass */
+        tableAddAll(&AS_CLASS(superclass)->methods, &subclass->methods);
+        pop(); // Pop the subclass
+        break;
+      }
       case OP_METHOD:
         defineMethod(READ_STRING());
         break;
@@ -577,6 +607,17 @@ static InterpretResult run() {
         Value value = pop(); // Stored value
         pop();               // Instance
         push(value);         // Push the value back
+        break;
+      }
+
+      case OP_GET_SUPER: {
+        /* Read method and superclass name */
+        ObjString* name = READ_STRING();
+        /* The statically resolved class is on top of the stack */
+        ObjClass* superclass = AS_CLASS(pop());
+        if (!bindMethod(superclass, name)) {
+          return INTERPRET_RUNTIME_ERROR;
+        }
         break;
       }
 
