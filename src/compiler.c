@@ -1043,11 +1043,10 @@ static void classDeclaration() {
     namedVariable(className, false);
     emitByte(OP_INHERIT);
     classCompiler.hasSuperclass = true;
-  }
-
-  /* Check if the class inherits from itself */
-  if (identifiersEqual(&className, &parser.previous)) {
-    error("A class cannot inherit from itself");
+    /* Check if the class inherits from itself */
+    if (identifiersEqual(&className, &parser.previous)) {
+      error("A class cannot inherit from itself");
+    }
   }
 
   /* Creation of a new lexical scope and add super as a local to it */

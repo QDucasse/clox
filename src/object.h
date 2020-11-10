@@ -18,10 +18,12 @@
 #define IS_STRING(value)       isObjType(value, OBJ_STRING)
 /* Check if the value is a closure */
 #define IS_CLOSURE(value)      isObjType(value, OBJ_CLOSURE)
-/* Check if the value is a function */
-#define IS_FUNCTION(value)     isObjType(value, OBJ_FUNCTION)
 /* Check if the value is a native function */
 #define IS_NATIVE(value)       isObjType(value, OBJ_NATIVE)
+/* Check if the value is a function */
+#define IS_FUNCTION(value)     isObjType(value, OBJ_FUNCTION)
+
+
 /* Conversion to bound method */
 #define AS_BOUND_METHOD(value) ((ObjBoundMethod*)AS_OBJ(value))
 /* Conversion to class */
